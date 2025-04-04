@@ -1,0 +1,28 @@
+# Binarios compilados
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Archivos de salida de prueba
+*.test
+*.prof
+
+# Archivos de variables de entorno
+.env
+
+# Archivos y carpetas específicos de Go
+/vendor/
+/Godeps/
+.DS_Store
+
+# Carpetas de dependencias
+/bin/
+/pkg/
+
+# Archivos de depuración
+debug
+
+# Executable
+rabbitmq-sensors

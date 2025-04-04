@@ -1,18 +1,54 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/streadway/amqp"
 )
 
 func main() {
+	// Cargar variables de entorno
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error cargando el archivo .env: %s", err)
+	}
+
+	// Obtener configuración de RabbitMQ desde variables de entorno
+	host := os.Getenv("RABBITMQ_HOST")
+	port := os.Getenv("RABBITMQ_PORT")
+	user := os.Getenv("RABBITMQ_USER")
+	password := os.Getenv("RABBITMQ_PASSWORD")
+	exchange := os.Getenv("RABBITMQ_EXCHANGE")
+
+	// Elegir una cola basada en un argumento de línea de comandos o usar MQ135 por defecto
+	queueName := os.Getenv("RABBITMQ_QUEUE_MQ135")
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "ky026":
+			queueName = os.Getenv("RABBITMQ_QUEUE_KY026")
+		case "mq2":
+			queueName = os.Getenv("RABBITMQ_QUEUE_MQ2")
+		case "mq135":
+			queueName = os.Getenv("RABBITMQ_QUEUE_MQ135")
+		case "dht22":
+			queueName = os.Getenv("RABBITMQ_QUEUE_DHT22")
+		default:
+			log.Printf("Sensor no reconocido, usando mq135 por defecto")
+		}
+	}
+
+	// Construir URL de conexión
+	amqpURL := fmt.Sprintf("amqp://%s:%s@%s:%s/", user, password, host, port)
+
 	// Conectar a RabbitMQ
-	conn, err := amqp.Dial("amqp://admin:password@54.197.14.45:5672/")
+	log.Printf("Conectando a RabbitMQ en %s", amqpURL)
+	conn, err := amqp.Dial(amqpURL)
 	if err != nil {
 		log.Fatalf("Error conectando a RabbitMQ: %s", err)
 	}
@@ -25,8 +61,21 @@ func main() {
 	}
 	defer ch.Close()
 
+	// Declarar el exchange
+	err = ch.ExchangeDeclare(
+		exchange, // nombre
+		"topic",  // tipo
+		true,     // durable
+		false,    // auto-delete
+		false,    // internal
+		false,    // no-wait
+		nil,      // argumentos
+	)
+	if err != nil {
+		log.Fatalf("Error al declarar el exchange: %s", err)
+	}
+
 	// Declarar una cola
-	queueName := "mi_cola"
 	q, err := ch.QueueDeclare(
 		queueName, // nombre
 		true,      // durable
@@ -37,6 +86,18 @@ func main() {
 	)
 	if err != nil {
 		log.Fatalf("Error al declarar la cola: %s", err)
+	}
+
+	// Enlazar la cola al exchange
+	err = ch.QueueBind(
+		q.Name,   // nombre de la cola
+		q.Name,   // routing key (mismo que el nombre de la cola)
+		exchange, // exchange
+		false,    // no-wait
+		nil,      // argumentos
+	)
+	if err != nil {
+		log.Fatalf("Error al enlazar la cola con el exchange: %s", err)
 	}
 
 	// Configurar QoS (calidad de servicio)
